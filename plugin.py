@@ -1,8 +1,9 @@
 # MELCloud Plugin
 # Author:     Gysmo, 2017 Updated by mitkodotcom 2022 Updated by Dalonsic 2023
-# Version: 0.8.3
+# Version: 0.8.4
 #
 # Release Notes:
+# v0.8.4: #38 Addon - Added extra polling intervals to prevent erorr 429 (to manay requests)
 # v0.8.3: #37 Fixed - Fix for Error: MelCloud: _plugin.onMessage(Connection, Data) compatibility with Mitkodotcom version
 # v0.8.2: #37 Fixed - Try to fix Error: MelCloud: _plugin.onMessage(Connection, Data)
 # v0.8.1: #37 Fixed - Clear list_units before a new connexion to MELCloud to prevent duplicate unit's logs
@@ -33,7 +34,7 @@
 #        Usefull if you use your Mitsubishi remote
 # v0.1 : Initial release
 """
-<plugin key="MELCloud" version="0.8.3" name="MELCloud plugin" author="gysmo mitkodotcom dalonsic" wikilink="http://www.domoticz.com/wiki/Plugins/MELCloud.html" externallink="http://www.melcloud.com">
+<plugin key="MELCloud" version="0.8.4" name="MELCloud plugin" author="gysmo mitkodotcom dalonsic" wikilink="http://www.domoticz.com/wiki/Plugins/MELCloud.html" externallink="http://www.melcloud.com">
     <params>
         <param field="Username" label="Email" width="200px" required="true" />
         <param field="Password" label="Password" width="200px" required="true" password="true"/>
@@ -76,6 +77,9 @@
                 <option label="2m" value="120" default="true"/>
                 <option label="5m - web" value="300"/>
                 <option label="10m" value="600"/>
+                <option label="15m" value="900"/>
+                <option label="30m" value="1800"/>
+                <option label="60m" value="3600"/>
             </options>
         </param>
         <param field="Mode3" label="Language" width="100px">
