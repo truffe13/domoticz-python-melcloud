@@ -519,7 +519,7 @@ class BasePlugin:
         return True
 
     def melcloud_login(self):
-        data = "AppVersion=1.9.3.0&Email={0}&Password={1}&Language={2}".format(Parameters["Username"], Parameters["Password"], int(Parameters["Mode3"]))
+        data = "AppVersion=1.9.3.0&Persist=True&Email={0}&Password={1}&Language={2}".format(Parameters["Username"], Parameters["Password"], int(Parameters["Mode3"]))
         self.melcloud_send_data(self.melcloud_urls["login"], data, "LOGIN")
         return True
 
