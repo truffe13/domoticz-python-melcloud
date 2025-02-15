@@ -1,10 +1,26 @@
 # MELCloud Plugin
+# Author:     Gysmo, 2017 Updated by mitkodotcom 2022 Updated by Dalonsic 2023
+# Version: 0.8.4
+#
+# Release Notes:
+# v0.8.4: #38 Addon - Added extra polling intervals to prevent erorr 429 (to manay requests)
+# v0.8.3: #37 Fixed - Fix for Error: MelCloud: _plugin.onMessage(Connection, Data) compatibility with Mitkodotcom version
+# v0.8.2: #37 Fixed - Try to fix Error: MelCloud: _plugin.onMessage(Connection, Data)
+# v0.8.1: #37 Fixed - Clear list_units before a new connexion to MELCloud to prevent duplicate unit's logs
+# v0.8.0: #37 Fixed - Heartbeat define to every seconds (old value : 25)
+#         #37 Addon - Add Mode2 parameter to select heartbeat interval for unit infos
+#         #35 Fixed - 'setPicID' referenced before assignment
+#         #30 Addon - Add Mode3 parameter to Multilanguage support
+# v0.7.9: #27 Fixed - login to melcloud, updated device discovery logic (using mitkodotcom send json logic thank's to him)
+
 # Author:     Gysmo, 2017 Updated by nonolk 2022
 # Version: 0.8.0
 #
 # Release Notes:
 # v0.8.0: Fixed ondisconnect not clearing the list of devices, replaced selecctor switch by setpoiont (previsous devices must be delted and recreated manually) with code cleanup in progress
 # v0.7.9: Fixed login to melcloud, updated device discovery logic (using mitkodotcom send json logic thank's to him)
+
+
 # v0.7.8: Code optimization
 # v0.7.7: Add test on domoticz dummy
 # v0.7.6: Fix Auto Mode added
@@ -27,7 +43,7 @@
 #        Usefull if you use your Mitsubishi remote
 # v0.1 : Initial release
 """
-<plugin key="MELCloud" version="0.7.9" name="MELCloud plugin" author="gysmo" wikilink="http://www.domoticz.com/wiki/Plugins/MELCloud.html" externallink="http://www.melcloud.com">
+<plugin key="MELCloud" version="0.8.4" name="MELCloud plugin" author="gysmo mitkodotcom dalonsic" wikilink="http://www.domoticz.com/wiki/Plugins/MELCloud.html" externallink="http://www.melcloud.com">
     <params>
         <param field="Username" label="Email" width="200px" required="true" />
         <param field="Password" label="Password" width="200px" required="true" password="true"/>
@@ -60,6 +76,51 @@
                 <option label="+12" value="+12"/>
             </options>
         </param>
+        <param field="Mode2" label="Refresh interval" width="100px">
+            <options>
+                <option label="1s" value="1"/>
+                <option label="5s" value="5"/>
+                <option label="10s" value="10"/>
+                <option label="20s - local" value="20"/>
+                <option label="1m" value="60"/>
+                <option label="2m" value="120" default="true"/>
+                <option label="5m - web" value="300"/>
+                <option label="10m" value="600"/>
+                <option label="15m" value="900"/>
+                <option label="30m" value="1800"/>
+                <option label="60m" value="3600"/>
+            </options>
+        </param>
+        <param field="Mode3" label="Language" width="100px">
+            <options>
+                <option label="English"     value="0" default="true"/>
+                <option label="Български"   value="1"/>
+                <option label="Čeština"     value="2"/>
+                <option label="Dansk"       value="3"/>
+                <option label="Deutsch"     value="4"/>
+                <option label="Eesti"       value="5"/>
+                <option label="Español"     value="6"/>
+                <option label="Français"    value="7"/>
+                <option label="Հայերեն"     value="8"/>
+                <option label="Latviešu"    value="9"/>
+                <option label="Lietuvių"    value="10"/>
+                <option label="Magyar"      value="11"/>
+                <option label="Nederlands"  value="12"/>
+                <option label="Norwegian"   value="13"/>
+                <option label="Polski"      value="14"/>
+                <option label="Português"   value="15"/>
+                <option label="Русский"     value="16"/>
+                <option label="Suomi"       value="17"/>
+                <option label="Svenska"     value="18"/>
+                <option label="Italiano"    value="19"/>
+                <option label="Українська"  value="20"/>
+                <option label="Türkçe"      value="21"/>
+                <option label="Ελληνικά"    value="22"/>
+                <option label="Hrvatski"    value="23"/>
+                <option label="Română"      value="24"/>
+                <option label="Slovenščina" value="25"/>
+            </options>
+        </param>
         <param field="Mode6" label="Debug" width="150px">
             <options>
                 <option label="None" value="0"  default="true" />
@@ -76,7 +137,6 @@
 </plugin>
 """
 
-import time
 import json
 import Domoticz
 
@@ -114,11 +174,12 @@ class BasePlugin:
 
     domoticz_levels = {}
     domoticz_levels["mode"] = {"0": 0, "10": 1, "20": 3, "30": 7, "40": 2, "50": 8}
-    domoticz_levels["mode_pic"] = {"0": 9, "10": 15, "20": 16, "30": 7, "40": 11}
+    domoticz_levels["mode_pic"] = {"0": 9, "10": 15, "20": 16, "30": 7, "40": 11, "50": 11}
     domoticz_levels["fan"] = {"0": 1, "10": 2, "20": 3, "30": 4, "40": 255, "50": 0, "60": 1}
     domoticz_levels["vaneH"] = {"0": 1, "10": 2, "20": 3, "30": 4, "40": 5, "50": 12, "60": 0}
     domoticz_levels["vaneV"] = {"0": 1, "10": 2, "20": 3, "30": 4, "40": 5, "50": 7, "60": 0}
 
+    runCounter = 0
     runAgain = 6
     enabled = False
 
@@ -126,8 +187,12 @@ class BasePlugin:
         return
 
     def onStart(self):
+        self.runCounter = int(Parameters['Mode2'])
+        Domoticz.Heartbeat(1)
+        
         if Parameters["Mode6"] != 0:
             Domoticz.Debugging(int(Parameters["Mode6"]))
+        
         # Start connection to MELCloud
         #Domoticz.Debugging(62)
         #Domoticz.Debugging(-1)
@@ -385,22 +450,30 @@ class BasePlugin:
         self.runAgain = 1
 
     def onHeartbeat(self):
-        if (self.melcloud_conn is not None and (self.melcloud_conn.Connecting() or self.melcloud_conn.Connected())):
-            if (self.melcloud_state != "LOGIN_FAILED") and (self.heartbeat == 2):
-                Domoticz.Debug("Current MEL Cloud Key ID:"+str(self.melcloud_key))
-                self.heartbeat = 0
-                for unit in self.list_units:
-                    self.melcloud_get_unit_info(unit)
-            else:
-                self.heartbeat += 1
+        # Unit info
+        self.runCounter = self.runCounter - 1
+        if (self.runCounter <= 0):
+            Domoticz.Debug("Poll unit")
+            self.runCounter = int(Parameters['Mode2'])
+            if (self.melcloud_conn is not None and (self.melcloud_conn.Connecting() or self.melcloud_conn.Connected())):
+                if self.melcloud_state != "LOGIN_FAILED":
+                    Domoticz.Debug("Current MEL Cloud Key ID:"+str(self.melcloud_key))
+                    for unit in self.list_units:
+                        self.melcloud_get_unit_info(unit)
         else:
+            Domoticz.Debug("Polling unit in " + str(self.runCounter) + " heartbeats.")
+        # Connection
+        if (self.melcloud_conn is None or self.melcloud_state == "LOGIN_FAILED" or self.melcloud_state == "Not Ready"):
             self.runAgain = self.runAgain - 1
             if self.runAgain <= 0:
+                Domoticz.Debug("[MELCloud][v0.8.3][onHeartbeat] Reconnection... ("+str(self.melcloud_state)+")")
+                self.list_units.clear()
                 self.melcloud_conn = Domoticz.Connection(Name="MELCloud", Transport="TCP/IP", Protocol="HTTPS",
                                                          Address=self.melcloud_baseurl, Port=self.melcloud_port)
                 self.melcloud_key = None
                 self.melcloud_conn.Connect()
                 self.runAgain = 6
+                self.runCounter = 0
             else:
                 Domoticz.Debug("MELCloud https failed. Reconnected in "+str(self.runAgain)+" heartbeats.")
 
@@ -462,10 +535,8 @@ class BasePlugin:
         return True
 
     def melcloud_login(self):
-        #data = "AppVersion=1.9.3.0&Email={0}&Password={1}".format(Parameters["Username"], Parameters["Password"])
-        post_fields = "Appversion:'{0}',CaptchaResponse:{1},Email:'{2}',Language:{3},Password:'{4}',Persist:{5}"
-        post_fields = post_fields.format(str("1.23.4.0"), "null",str(Parameters["Username"]),"0", str(Parameters["Password"]), "true")
-        self.melcloud_send_data_json(self.melcloud_urls["login"], "{"+post_fields+"}", "LOGIN")
+        data = "AppVersion=1.9.3.0&Persist=True&Email={0}&Password={1}&Language={2}".format(Parameters["Username"], Parameters["Password"], int(Parameters["Mode3"]))
+        self.melcloud_send_data(self.melcloud_urls["login"], data, "LOGIN")
         return True
 
     def melcloud_add_unit(self, device, idoffset):
@@ -499,7 +570,7 @@ class BasePlugin:
     def melcloud_set(self, unit, flag):
         post_fields = "'Power':{0},'DeviceID':{1},'OperationMode':{2},'SetTemperature':{3},'SetFanSpeed':{4},'VaneHorizontal':{5},'VaneVertical':{6},'EffectiveFlags':{7},'HasPendingCommand':true"
         post_fields = post_fields.format(str(unit['power']).lower(), unit['id'], unit['op_mode'], unit['set_temp'], unit['set_fan'], unit['vaneH'], unit['vaneV'], flag)
-        Domoticz.Log("SET COMMAND SEND {0}".format(post_fields))
+        Domoticz.Debug("SET COMMAND SEND {0}".format(post_fields))
         self.melcloud_send_data_json(self.melcloud_urls["set_unit"], "{"+post_fields+"}", "SET")
 
     def melcloud_get_unit_info(self, unit):
@@ -527,9 +598,9 @@ class BasePlugin:
             for level, pic in self.domoticz_levels["mode_pic"].items():
                 if level == setModeLevel:
                     setPicID = pic
-            Devices[self.list_switchs[0]["id"]+unit["idoffset"]].Update(nValue=switch_value,
-                                                                        sValue=setModeLevel,
-                                                                        Image=setPicID)
+                    Devices[self.list_switchs[0]["id"]+unit["idoffset"]].Update(nValue=switch_value,
+                                                                                sValue=setModeLevel,
+                                                                                Image=setPicID)
             for level, fan in self.domoticz_levels["fan"].items():
                 if fan == unit['set_fan']:
                     setDomFan = level
@@ -605,7 +676,6 @@ def onHeartbeat():
 
 if __name__ == "__main__":
     from Domoticz import Parameters
-    from Domoticz import Images
     from Domoticz import Devices
     from TestCode import runtest
 
