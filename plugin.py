@@ -1,8 +1,9 @@
 # MELCloud Plugin
 # Author:     Gysmo, 2017 Updated by mitkodotcom 2022 Updated by Dalonsic 2023
-# Version: 0.8.4
+# Version: 0.8.5
 #
 # Release Notes:
+# v0.8.5: truffe13 : change connection method to melcloud to melcloud_send_data_json
 # v0.8.4: #38 Addon - Added extra polling intervals to prevent erorr 429 (to manay requests)
 # v0.8.3: #37 Fixed - Fix for Error: MelCloud: _plugin.onMessage(Connection, Data) compatibility with Mitkodotcom version
 # v0.8.2: #37 Fixed - Try to fix Error: MelCloud: _plugin.onMessage(Connection, Data)
@@ -466,7 +467,7 @@ class BasePlugin:
         if (self.melcloud_conn is None or self.melcloud_state == "LOGIN_FAILED" or self.melcloud_state == "Not Ready"):
             self.runAgain = self.runAgain - 1
             if self.runAgain <= 0:
-                Domoticz.Debug("[MELCloud][v0.8.3][onHeartbeat] Reconnection... ("+str(self.melcloud_state)+")")
+                Domoticz.Debug("[MELCloud][v0.8.5][onHeartbeat] Reconnection... ("+str(self.melcloud_state)+")")
                 self.list_units.clear()
                 self.melcloud_conn = Domoticz.Connection(Name="MELCloud", Transport="TCP/IP", Protocol="HTTPS",
                                                          Address=self.melcloud_baseurl, Port=self.melcloud_port)
@@ -535,8 +536,13 @@ class BasePlugin:
         return True
 
     def melcloud_login(self):
-        data = "AppVersion=1.9.3.0&Persist=True&Email={0}&Password={1}&Language={2}".format(Parameters["Username"], Parameters["Password"], int(Parameters["Mode3"]))
-        self.melcloud_send_data(self.melcloud_urls["login"], data, "LOGIN")
+#        data = "AppVersion=1.9.3.0&Persist=True&Email={0}&Password={1}&Language={2}".format(Parameters["Username"], Parameters["Password"], int(Parameters["Mode3"]))
+#        self.melcloud_send_data(self.melcloud_urls["login"], data, "LOGIN")
+
+        post_fields = "Appversion:'{0}',CaptchaResponse:{1},Email:'{2}',Language:{3},Password:'{4}',Persist:{5}"
+        post_fields = post_fields.format(str("1.23.4.0"), "null",str(Parameters["Username"]),"1", str(Parameters["Password"]), "true")
+        self.melcloud_send_data_json(self.melcloud_urls["login"], "{"+post_fields+"}", "LOGIN")
+
         return True
 
     def melcloud_add_unit(self, device, idoffset):
