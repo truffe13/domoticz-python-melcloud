@@ -1,20 +1,18 @@
 # domoticz-python-melcloud
 ## History
 
-This is a fork of https://github.com/jf67-07/domoticz-python-melcloud.git 
-which itself is a merge of 
+This is a fork of https://github.com/jf67-07/domoticz-python-melcloud.git  which itself is a merge of 
 
   https://github.com/tuk90/domoticz-python-melcloud.git
 and
   https://github.com/nonolk/domoticz-python-melcloud.git
   
-I have forked it because for me the connection to Melcloud was not worked, even if the plugin version propsed by jf67-07  was the most advanced release.
+The forks is because the connection to Melcloud was not functionning. However the version proposed by jf67-07  seeems the most advanced release.
 
-It includes :
 - Thermostat (Temperature set point)
-- possibility to select the refresh rate avoiding Melcloud overloaded and domoticz crash. 
+- possibility to select the refresh rate avoiding Melcloud to be overloaded and then crash of domoticz. 
 
-TestCode has been modified as well. 
+TestCode has been modified adding required parameters. 
 
 ## Installation
 1. Clone repository into your domoticz plugins folder
