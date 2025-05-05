@@ -7,12 +7,16 @@ This is a fork of https://github.com/jf67-07/domoticz-python-melcloud.git  which
 and
   https://github.com/nonolk/domoticz-python-melcloud.git
   
-The forks is because the connection to Melcloud was not functionning. However the version proposed by jf67-07  seeems the most advanced release.
+The forks was because the connection to Melcloud was not functionning. However the version proposed by jf67-07  seeems the most advanced release providing :
 
 - Thermostat (Temperature set point)
 - possibility to select the refresh rate avoiding Melcloud to be overloaded and then crash of domoticz. 
+- 7 devices per unit : Mode, Fan, Vane Vertical, Vane Horizontal, temp, temp set point, info
+
+Version 0.9 adds one energy counter per unit (experimental)
 
 TestCode has been modified adding required parameters. 
+
 
 ## Installation
 1. Clone repository into your domoticz plugins folder
