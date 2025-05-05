@@ -1,9 +1,19 @@
+#
 # MELCloud Plugin
-# Author:     Gysmo, 2017 Updated by mitkodotcom 2022 Updated by Dalonsic 2023
-# Version: 0.8.5
+# Author:     Gysmo, 2017 Updated by mitkodotcom 2022 Updated by Dalonsic 2023, Update by truffe13 2025
 #
 # Release Notes:
+# Version: 0.9.0
+#        - add Energy counters (1 per unit) based on CurrentEnergyConsumed (experimental)
+#        - Change levels labels to be more explicit (than numbers)  according  MELCloud API : https://github.com/OlivierZal/melcloud-api
+#        - Maximum Refresh rate at 5mn, >= 5m causes TCP connection to disconnect and reconnect and minimum set to 20s
+#        - Remove clear list_units before a new connexion to MELCloud to avoid conflict with possible simultaneous commands
+#
+# Version: 0.8.5
 # v0.8.5: truffe13 : change connection method to melcloud to melcloud_send_data_json
+#                    MELCloud API : https://github.com/OlivierZal/melcloud-api
+##
+# Release Notes:
 # v0.8.4: #38 Addon - Added extra polling intervals to prevent erorr 429 (to manay requests)
 # v0.8.3: #37 Fixed - Fix for Error: MelCloud: _plugin.onMessage(Connection, Data) compatibility with Mitkodotcom version
 # v0.8.2: #37 Fixed - Try to fix Error: MelCloud: _plugin.onMessage(Connection, Data)
@@ -44,7 +54,7 @@
 #        Usefull if you use your Mitsubishi remote
 # v0.1 : Initial release
 """
-<plugin key="MELCloud" version="0.8.4" name="MELCloud plugin" author="gysmo mitkodotcom dalonsic" wikilink="http://www.domoticz.com/wiki/Plugins/MELCloud.html" externallink="http://www.melcloud.com">
+<plugin key="MELCloud" version="0.9.0" name="MELCloudT plugin" author="gysmo mitkodotcom dalonsic truffe13" wikilink="http://www.domoticz.com/wiki/Plugins/MELCloud.html" externallink="http://www.melcloud.com">
     <params>
         <param field="Username" label="Email" width="200px" required="true" />
         <param field="Password" label="Password" width="200px" required="true" password="true"/>
@@ -79,17 +89,11 @@
         </param>
         <param field="Mode2" label="Refresh interval" width="100px">
             <options>
-                <option label="1s" value="1"/>
-                <option label="5s" value="5"/>
-                <option label="10s" value="10"/>
-                <option label="20s - local" value="20"/>
+                <option label="20s"  value="20"/>
                 <option label="1m" value="60"/>
-                <option label="2m" value="120" default="true"/>
-                <option label="5m - web" value="300"/>
-                <option label="10m" value="600"/>
-                <option label="15m" value="900"/>
-                <option label="30m" value="1800"/>
-                <option label="60m" value="3600"/>
+                <option label="2m" value="120"/>
+                <option label="4m"  value="240" default="true"/>
+                <option label="5m" value="300"/>
             </options>
         </param>
         <param field="Mode3" label="Language" width="100px">
@@ -120,6 +124,7 @@
                 <option label="Hrvatski"    value="23"/>
                 <option label="Română"      value="24"/>
                 <option label="Slovenščina" value="25"/>
+                <option label="Shqip"       value="26"/>
             </options>
         </param>
         <param field="Mode6" label="Debug" width="150px">
@@ -140,6 +145,7 @@
 
 import json
 import Domoticz
+import os
 
 
 class BasePlugin:
@@ -164,14 +170,16 @@ class BasePlugin:
     list_switchs.append({"id": 1, "name": "Mode", "typename": "Selector Switch",
                          "image": 16, "levels": "Off|Warm|Cold|Vent|Dry|Auto"})
     list_switchs.append({"id": 2, "name": "Fan", "typename": "Selector Switch",
-                         "image": 7, "levels": "Level1|Level2|Level3|Level4|Level5|Auto|Silence"})
+                         "image": 7, "levels": "1-VerySlow|2-Slow|3-Moderate|4-Fast|5-VeryFast|Auto|Silence"})
     list_switchs.append({"id": 3, "name": "Temp", "typename": "Thermostat"})
     list_switchs.append({"id": 4, "name": "Vane Horizontal", "typename": "Selector Switch",
-                         "image": 7, "levels": "1|2|3|4|5|Swing|Auto"})
+                         "image": 7, "levels": "LeftWards|CenterLeft|Center|CenterRight|RightWards|Swing|Auto"})
     list_switchs.append({"id": 5, "name": "Vane Vertical", "typename": "Selector Switch",
-                         "image": 7, "levels": "1|2|3|4|5|Swing|Auto"})
+                         "image": 7, "levels": "UpWards|MidHigh|Middle|MidLow|DownWards|Swing|Auto"})
     list_switchs.append({"id": 6, "name": "Room Temp", "typename": "Temperature"})
     list_switchs.append({"id": 7, "name": "Unit Infos", "typename": "Text"})
+    list_switchs.append({"id": 8, "name": "KWh", "typename": "Counter"})
+
 
     domoticz_levels = {}
     domoticz_levels["mode"] = {"0": 0, "10": 1, "20": 3, "30": 7, "40": 2, "50": 8}
@@ -179,6 +187,13 @@ class BasePlugin:
     domoticz_levels["fan"] = {"0": 1, "10": 2, "20": 3, "30": 4, "40": 255, "50": 0, "60": 1}
     domoticz_levels["vaneH"] = {"0": 1, "10": 2, "20": 3, "30": 4, "40": 5, "50": 12, "60": 0}
     domoticz_levels["vaneV"] = {"0": 1, "10": 2, "20": 3, "30": 4, "40": 5, "50": 7, "60": 0}
+
+    # currentEnergyConsumed
+    list_units_kWh = []
+    runCounterkWhValue = 1200+3 # 20mn
+    runCounterkWh = runCounterkWhValue
+    unitsJustCreated = False
+
 
     runCounter = 0
     runAgain = 6
@@ -188,7 +203,10 @@ class BasePlugin:
         return
 
     def onStart(self):
-        self.runCounter = int(Parameters['Mode2'])
+        self.runCounter = 18 # Run 18s after login then Mode 2 parameter
+        self.runCounterkWh = 10 # Run 10s after login then  runCounterkWhValue
+        self.list_units.clear()
+
         Domoticz.Heartbeat(1)
         
         if Parameters["Mode6"] != 0:
@@ -206,6 +224,7 @@ class BasePlugin:
         return True
 
     def onStop(self):
+        self.list_units.clear()
         Domoticz.Log("Goobye from MELCloud plugin.")
 
     def onConnect(self, Connection, Status, Description):
@@ -277,6 +296,68 @@ class BasePlugin:
         
         return (nr_of_Units, idoffset, cEnergyConsumed)
 
+    # Store initial counters values in files
+    def melcloud_store_offset (self,name, kwh):
+        melcloud_file =  os.getcwd() + "/melcloud_offset_values_"+ name + ".txt"
+        with open(melcloud_file, "w") as f:
+                f.write(str(kwh))
+
+    def melcloud_read_offset (self,name):
+        melcloud_file = os.getcwd() + "/melcloud_offset_values_"+ name + ".txt"
+        Domoticz.Log("files" + melcloud_file)
+        with open(melcloud_file, "r") as f:
+                return f.read()
+
+
+    def updatekWh(self, building ):
+        # building["Structure"]["Devices"]
+        # building["Structure"]["Areas"]
+        # building["Structure"]["Floors"]
+        scope = 'Devices'
+        found = False
+        for item in building["Structure"][scope]:
+            melcloud_unit_kWh ={}
+            if item['Type'] == 0 :
+                print('Device ',item['DeviceName'])
+                currentkWh = self.extractDeviceData(item)
+                print('kWh ',currentkWh)
+            for unit_kWh in self.list_units_kWh:
+                if unit_kWh ['name'] == item['DeviceName']:
+                    unit_kWh['Current_kWh'] = currentkWh
+                    found = True
+                    # print('\n Update  kWh')
+                    # print('\n Update  kWh',  self.list_units_kWh, '\n')
+            if found == False :
+                melcloud_unit_kWh['name'] = item['DeviceName']
+                melcloud_unit_kWh['Current_kWh']= currentkWh
+                # self.unitsJustCreated = False
+                if self.unitsJustCreated == True:
+                    self.melcloud_store_offset(item['DeviceName'],currentkWh)
+                    melcloud_unit_kWh['Offset_kWh']= currentkWh
+                    # print ("\n  WRITE OFFSET VALUE ", melcloud_unit_kWh['Offset_kWh'])
+                else:
+                    melcloud_unit_kWh['Offset_kWh'] = float(self.melcloud_read_offset (item['DeviceName']))
+                    # print ("\n READ OFFSET VALUE ", melcloud_unit_kWh['Offset_kWh'])
+                self.list_units_kWh.append(melcloud_unit_kWh)
+                print ('\n Append list_units_kWh')
+
+
+
+        return
+
+    def updateUnitkWh(self, unitName ):
+        kWh = 0
+        for unit_kWh in self.list_units_kWh:
+            if unit_kWh ['name'] == unitName:
+                if unitName=='Cuisine' :
+                    kWh = unit_kWh['Current_kWh'] - unit_kWh['Offset_kWh']
+                elif unitName=='Chambre':
+                    kWh = unit_kWh['Current_kWh'] - unit_kWh['Offset_kWh']
+                else:
+                    kWh = unit_kWh['Current_kWh'] - unit_kWh['Offset_kWh']
+        print ('\n updateUnitkWh ', unitName, kWh)
+        return kWh
+
     def onMessage(self, Connection, Data):
         Status = int(Data["Status"])
         if Status == 200:
@@ -297,7 +378,7 @@ class BasePlugin:
 
             elif self.melcloud_state == "UNITS_INIT":
                 idoffset = 0
-                Domoticz.Log("Find " + str(len(response)) + " buildings")
+                Domoticz.Log(" Find " + str(len(response)) + " buildings")
                 for building in response:
                     Domoticz.Log("Find " + str(len(building["Structure"]["Areas"])) +
                                  " areas in building "+building["Name"])
@@ -311,6 +392,7 @@ class BasePlugin:
                     (nr_of_Units, idoffset, cEnergyConsumed) = self.searchUnits(building, "Floors", idoffset)
                 self.melcloud_create_units()
             elif self.melcloud_state == "UNIT_INFO":
+                Domoticz.Log(" UNIT INFO")
                 for unit in self.list_units:
                     if unit['id'] == response['DeviceID']:
                         Domoticz.Log("Update unit {0} information.".format(unit['name']))
@@ -321,6 +403,7 @@ class BasePlugin:
                         unit['set_fan'] = response['SetFanSpeed']
                         unit['vaneH'] = response['VaneHorizontal']
                         unit['vaneV'] = response['VaneVertical']
+                        unit['kWh']= self.updateUnitkWh(unit['name'])
                         unit['next_comm'] = False
                         Domoticz.Debug("Heartbeat unit info: "+str(unit))
                         self.domoticz_sync_switchs(unit)
@@ -347,6 +430,17 @@ class BasePlugin:
                         unit['next_comm'] = "Update for last command at "+next_comm
                         Domoticz.Log("Next update for command: " + next_comm)
                         self.domoticz_sync_switchs(unit)
+            elif self.melcloud_state == "DEV_INFO":
+                Domoticz.Log(" DEV INFO")
+                idoffset = 0
+                Domoticz.Log(" Retrieve " + str(len(response)) + " buildings")
+                for building in response:
+                    # Domoticz.Log("Retrieve " + str(len(building["Structure"]["Areas"])) +
+                    #             " areas in building "+building["Name"])
+                    # Domoticz.Log("Retrieve " + str(len(building["Structure"]["Floors"])) +
+                    #             " floors in building "+building["Name"])
+                    # Search and update units kWh in devices
+                    self.updatekWh(building)
             else:
                 Domoticz.Log("State not implemented:" + self.melcloud_state)
         else:
@@ -357,8 +451,8 @@ class BasePlugin:
                      ": Parameter '" + str(Command) + "', Level: " + str(Level))
         # ~ Get switch function: mode, fan, temp ...
         switch_id = Unit
-        while switch_id > 7:
-            switch_id -= 7
+        while switch_id > 8:
+            switch_id -= 8
         switch_type = self.list_switchs[switch_id-1]["name"]
         # ~ Get the unit in units array
         current_unit = False
@@ -371,7 +465,7 @@ class BasePlugin:
                 flag = 1
                 current_unit['power'] = 'false'
                 Domoticz.Log("Switch Off the unit "+current_unit['name'] +
-                             "with ID offset " + str(current_unit['idoffset']))
+                             " with ID offset " + str(current_unit['idoffset']))
                 Devices[1+current_unit['idoffset']].Update(nValue=0, sValue=str(Level), Image=9)
                 Devices[2+current_unit['idoffset']].Update(nValue=0,
                                                            sValue=str(Devices[Unit + 1].sValue))
@@ -446,13 +540,23 @@ class BasePlugin:
 
     def onDisconnect(self, Connection):
         self.melcloud_state = "Not Ready"
-        self.list_units.clear()
         Domoticz.Log("MELCloud has disconnected")
         self.runAgain = 1
 
     def onHeartbeat(self):
-        # Unit info
+        Domoticz.Debug("onHeartbeat")
+        # Device info for getting kWh
+        self.runCounterkWh = self.runCounterkWh - 1
         self.runCounter = self.runCounter - 1
+        if (self.runCounterkWh <= 0):
+            Domoticz.Debug("List units to get kWh")
+            self.runCounterkWh = self.runCounterkWhValue
+            if (self.melcloud_conn is not None and (self.melcloud_conn.Connecting() or self.melcloud_conn.Connected())):
+                if self.melcloud_state != "LOGIN_FAILED":
+                    Domoticz.Debug("Current MEL Cloud Key ID:"+str(self.melcloud_key))
+                    Domoticz.Log(" Get kWh")
+                    self.melcloud_device_info()
+        # Unit info
         if (self.runCounter <= 0):
             Domoticz.Debug("Poll unit")
             self.runCounter = int(Parameters['Mode2'])
@@ -467,8 +571,8 @@ class BasePlugin:
         if (self.melcloud_conn is None or self.melcloud_state == "LOGIN_FAILED" or self.melcloud_state == "Not Ready"):
             self.runAgain = self.runAgain - 1
             if self.runAgain <= 0:
-                Domoticz.Debug("[MELCloud][v0.8.5][onHeartbeat] Reconnection... ("+str(self.melcloud_state)+")")
-                self.list_units.clear()
+                Domoticz.Debug("[MELCloud][v0.9.0][onHeartbeat] Reconnection... ("+str(self.melcloud_state)+")")
+                # self.list_units.clear()
                 self.melcloud_conn = Domoticz.Connection(Name="MELCloud", Transport="TCP/IP", Protocol="HTTPS",
                                                          Address=self.melcloud_baseurl, Port=self.melcloud_port)
                 self.melcloud_key = None
@@ -480,7 +584,7 @@ class BasePlugin:
 
     def melcloud_create_units(self):
         Domoticz.Log("Units infos " + str(self.list_units))
-        if len(Devices) == 0:
+        if len(Devices) == 0 :
             # Init Devices
             # Creation of switches
             Domoticz.Log("Find " + str(len(self.list_units)) + " devices in MELCloud")
@@ -495,9 +599,16 @@ class BasePlugin:
                     elif switch["typename"] == "Thermostat":
                         Domoticz.Device(Name=device['name'] + " - "+switch["name"], Unit=switch["id"]+device['idoffset'],
                                         Type=242, Subtype=1, Used=1).Create()
+                    elif switch["typename"] == "Counter":
+                        Domoticz.Device(Name=device['name'] + " - "+switch["name"], Unit=switch["id"]+device['idoffset'],
+                                        Type=113, Used=1 ).Create()
                     else:
                         Domoticz.Device(Name=device['name'] + " - "+switch["name"], Unit=switch["id"]+device['idoffset'],
                                         TypeName=switch["typename"], Used=1).Create()
+            self.unitsJustCreated = True
+        else:
+            self.unitsJustCreated = False
+
 
     def melcloud_send_data(self, url, values, state):
         self.melcloud_state = state
@@ -536,9 +647,6 @@ class BasePlugin:
         return True
 
     def melcloud_login(self):
-#        data = "AppVersion=1.9.3.0&Persist=True&Email={0}&Password={1}&Language={2}".format(Parameters["Username"], Parameters["Password"], int(Parameters["Mode3"]))
-#        self.melcloud_send_data(self.melcloud_urls["login"], data, "LOGIN")
-
         post_fields = "Appversion:'{0}',CaptchaResponse:{1},Email:'{2}',Language:{3},Password:'{4}',Persist:{5}"
         post_fields = post_fields.format(str("1.23.4.0"), "null",str(Parameters["Username"]),"1", str(Parameters["Password"]), "true")
         self.melcloud_send_data_json(self.melcloud_urls["login"], "{"+post_fields+"}", "LOGIN")
@@ -559,12 +667,24 @@ class BasePlugin:
         melcloud_unit['set_fan'] = ""
         melcloud_unit['vaneH'] = ""
         melcloud_unit['vaneV'] = ""
+        melcloud_unit['kWh'] = ""
         melcloud_unit['next_comm'] = False
         melcloud_unit['idoffset'] = idoffset
-        self.list_units.append(melcloud_unit)
+        # avoid duplicate
+        found = False
+        for unit in self.list_units:
+            if unit['id'] == melcloud_unit['id'] :
+                found = True
+        if found == False :
+            self.list_units.append(melcloud_unit)
+        #Domoticz.Log('\n LIST UNITS '+ str(self.list_units))
 
     def melcloud_units_init(self):
         self.melcloud_send_data(self.melcloud_urls["list_unit"], None, "UNITS_INIT")
+        return True
+
+    def melcloud_device_info(self):
+        self.melcloud_send_data(self.melcloud_urls["list_unit"], None, "DEV_INFO")
         return True
 
     def melcloud_set_urlencode(self, unit, flag):
@@ -626,7 +746,9 @@ class BasePlugin:
                                                                                 sValue=setDomVaneV)
             Devices[self.list_switchs[5]["id"]+unit["idoffset"]].Update(nValue=switch_value,
                                                                         sValue=str(unit['room_temp']))
-            
+            Devices[self.list_switchs[7]["id"]+unit["idoffset"]].Update(nValue=switch_value,
+                                                                        sValue=str(unit['kWh']))
+
 
 global _plugin
 _plugin = BasePlugin()
