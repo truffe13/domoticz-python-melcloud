@@ -213,8 +213,6 @@ class BasePlugin:
             Domoticz.Debugging(int(Parameters["Mode6"]))
         
         # Start connection to MELCloud
-        #Domoticz.Debugging(62)
-        #Domoticz.Debugging(-1)
         self.melcloud_conn = Domoticz.Connection(Name="MELCloud", Transport="TCP/IP",
                                                  Protocol="HTTPS", Address=self.melcloud_baseurl,
                                                  Port=self.melcloud_port)
@@ -273,13 +271,11 @@ class BasePlugin:
                                                                        nr_of_Units, cEnergyConsumed,
                                                                        building, scope)
             elif scope in ('Areas', 'Floors'):
-                #Domoticz.Log("In Areas floors")
                 for device in item["Devices"]:
                     (nr_of_Units, idoffset, cEnergyConsumed) = oneUnit(self, device, idoffset,
                                                                        nr_of_Units, cEnergyConsumed,
                                                                        building, scope)
                 if scope == 'Floors':
-                    #Domoticz.Log("In Floors")
                     for device in item["Devices"]:
                              (nr_of_Units, idoffset, cEnergyConsumed) = oneUnit(self, device, idoffset,
                                                                    nr_of_Units, cEnergyConsumed,
@@ -304,7 +300,7 @@ class BasePlugin:
 
     def melcloud_read_offset (self,name):
         melcloud_file = os.getcwd() + "/melcloud_offset_values_"+ name + ".txt"
-        Domoticz.Log("files" + melcloud_file)
+        Domoticz.Debug("files" + melcloud_file)
         with open(melcloud_file, "r") as f:
                 return f.read()
 
@@ -318,15 +314,11 @@ class BasePlugin:
         for item in building["Structure"][scope]:
             melcloud_unit_kWh ={}
             if item['Type'] == 0 :
-                print('Device ',item['DeviceName'])
                 currentkWh = self.extractDeviceData(item)
-                print('kWh ',currentkWh)
             for unit_kWh in self.list_units_kWh:
                 if unit_kWh ['name'] == item['DeviceName']:
                     unit_kWh['Current_kWh'] = currentkWh
                     found = True
-                    # print('\n Update  kWh')
-                    # print('\n Update  kWh',  self.list_units_kWh, '\n')
             if found == False :
                 melcloud_unit_kWh['name'] = item['DeviceName']
                 melcloud_unit_kWh['Current_kWh']= currentkWh
@@ -339,7 +331,6 @@ class BasePlugin:
                     melcloud_unit_kWh['Offset_kWh'] = float(self.melcloud_read_offset (item['DeviceName']))
                     # print ("\n READ OFFSET VALUE ", melcloud_unit_kWh['Offset_kWh'])
                 self.list_units_kWh.append(melcloud_unit_kWh)
-                print ('\n Append list_units_kWh')
 
 
 
@@ -349,13 +340,11 @@ class BasePlugin:
         kWh = 0
         for unit_kWh in self.list_units_kWh:
             if unit_kWh ['name'] == unitName:
-                if unitName=='Cuisine' :
+                if unit_kWh['Current_kWh'] >= unit_kWh['Offset_kWh'] :
                     kWh = unit_kWh['Current_kWh'] - unit_kWh['Offset_kWh']
-                elif unitName=='Chambre':
-                    kWh = unit_kWh['Current_kWh'] - unit_kWh['Offset_kWh']
-                else:
-                    kWh = unit_kWh['Current_kWh'] - unit_kWh['Offset_kWh']
-        print ('\n updateUnitkWh ', unitName, kWh)
+                else :
+                    kWh = 0
+                    Domoticz.Log("PB : Current kWh : " + unit_kWh['Current_kWh'] + " < Offset : " + unit_kWh['Offset_kWh'] + " -> Return 0kWh")
         return kWh
 
     def onMessage(self, Connection, Data):
@@ -417,7 +406,7 @@ class BasePlugin:
                             mode1 = '+0'
                         sign = mode1[0]
                         value = mode1[1:]
-                        Domoticz.Debug("TIME OFFSSET :" + sign + value)
+                        Domoticz.Debug("TIME OFFSET :" + sign + value)
                         if sign == "-":
                             hours = int(hours) - int(value)
                             if hours < 0:
@@ -435,11 +424,6 @@ class BasePlugin:
                 idoffset = 0
                 Domoticz.Log(" Retrieve " + str(len(response)) + " buildings")
                 for building in response:
-                    # Domoticz.Log("Retrieve " + str(len(building["Structure"]["Areas"])) +
-                    #             " areas in building "+building["Name"])
-                    # Domoticz.Log("Retrieve " + str(len(building["Structure"]["Floors"])) +
-                    #             " floors in building "+building["Name"])
-                    # Search and update units kWh in devices
                     self.updatekWh(building)
             else:
                 Domoticz.Log("State not implemented:" + self.melcloud_state)
@@ -522,12 +506,12 @@ class BasePlugin:
         elif switch_type == 'Vane Horizontal':
             flag = 256
             current_unit['vaneH'] = self.domoticz_levels['vaneH'][str(Level)]
-            Domoticz.Debug("Change Vane Horizontal to value {0} for {1}".format(self.domoticz_levels['vaneH'][str(Level)], current_unit['name']))
+            Domoticz.Log("Change Vane Horizontal to value {0} for {1}".format(self.domoticz_levels['vaneH'][str(Level)], current_unit['name']))
             Devices[Unit].Update(Devices[Unit].nValue, str(Level))
         elif switch_type == 'Vane Vertical':
             flag = 16
             current_unit['vaneV'] = self.domoticz_levels['vaneV'][str(Level)]
-            Domoticz.Debug("Change Vane Vertical to value {0} for {1}".format(self.domoticz_levels['vaneV'][str(Level)], current_unit['name']))
+            Domoticz.Log("Change Vane Vertical to value {0} for {1}".format(self.domoticz_levels['vaneV'][str(Level)], current_unit['name']))
             Devices[Unit].Update(Devices[Unit].nValue, str(Level))
         else:
             Domoticz.Log("Device not found")
@@ -554,7 +538,7 @@ class BasePlugin:
             if (self.melcloud_conn is not None and (self.melcloud_conn.Connecting() or self.melcloud_conn.Connected())):
                 if self.melcloud_state != "LOGIN_FAILED":
                     Domoticz.Debug("Current MEL Cloud Key ID:"+str(self.melcloud_key))
-                    Domoticz.Log(" Get kWh")
+                    Domoticz.Debug(" Get kWh")
                     self.melcloud_device_info()
         # Unit info
         if (self.runCounter <= 0):
