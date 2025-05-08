@@ -54,7 +54,7 @@
 #        Usefull if you use your Mitsubishi remote
 # v0.1 : Initial release
 """
-<plugin key="MELCloud" version="0.9.0" name="MELCloudT plugin" author="gysmo mitkodotcom dalonsic truffe13" wikilink="http://www.domoticz.com/wiki/Plugins/MELCloud.html" externallink="http://www.melcloud.com">
+<plugin key="MELCloud" version="0.9.0" name="MELCloud plugin" author="gysmo mitkodotcom dalonsic truffe13" wikilink="http://www.domoticz.com/wiki/Plugins/MELCloud.html" externallink="http://www.melcloud.com">
     <params>
         <param field="Username" label="Email" width="200px" required="true" />
         <param field="Password" label="Password" width="200px" required="true" password="true"/>
@@ -181,6 +181,7 @@ class BasePlugin:
     list_switchs.append({"id": 8, "name": "KWh", "typename": "Counter"})
 
 
+
     domoticz_levels = {}
     domoticz_levels["mode"] = {"0": 0, "10": 1, "20": 3, "30": 7, "40": 2, "50": 8}
     domoticz_levels["mode_pic"] = {"0": 9, "10": 15, "20": 16, "30": 7, "40": 11, "50": 11}
@@ -193,6 +194,11 @@ class BasePlugin:
     runCounterkWhValue = 1200+3 # 20mn
     runCounterkWh = runCounterkWhValue
     unitsJustCreated = False
+    plugin_path = ""
+    # For tests
+    #valeur_test=[20,21,22,23,24,25,10,11,12,13,0,1,2,3]
+    #nvaleur_test=14
+    #ivaleur_test=0
 
 
     runCounter = 0
@@ -206,6 +212,8 @@ class BasePlugin:
         self.runCounter = 18 # Run 18s after login then Mode 2 parameter
         self.runCounterkWh = 10 # Run 10s after login then  runCounterkWhValue
         self.list_units.clear()
+
+        self.plugin_path = os.path.dirname(os.path.abspath(__file__))
 
         Domoticz.Heartbeat(1)
         
@@ -238,7 +246,18 @@ class BasePlugin:
             self.dict_devices['DeviceName'] = device
             # print('\n---device\n', device, '\n---\n')
             if 'HasEnergyConsumedMeter' in device['Device'].keys():
-                return device['Device']['CurrentEnergyConsumed']/1000
+                ## For tests
+                #if device['DeviceName'] == 'Chambre' :
+                #    device['Device']['CurrentEnergyConsumed']=self.valeur_test[self.ivaleur_test]
+                #    if self.ivaleur_test < (self.nvaleur_test-1) :
+                #        self.ivaleur_test += 1
+                #    else :
+                #        self.ivaleur_test=0
+                #    return device['Device']['CurrentEnergyConsumed']
+                #else:
+                #    return device['Device']['CurrentEnergyConsumed']
+                # Return value in Wh ( not kWh)
+                return device['Device']['CurrentEnergyConsumed']
             else:
                 return 0
 
@@ -292,15 +311,30 @@ class BasePlugin:
         
         return (nr_of_Units, idoffset, cEnergyConsumed)
 
-    # Store initial counters values in files
+    # Store / Read offset to apply when reading melcloud Devices value
     def melcloud_store_offset (self,name, kwh):
-        melcloud_file =  os.getcwd() + "/melcloud_offset_values_"+ name + ".txt"
+        melcloud_file =  self.plugin_path + "/melcloud_offset_values_"+ name + ".txt"
+        Domoticz.Debug("Write files" + melcloud_file)
         with open(melcloud_file, "w") as f:
                 f.write(str(kwh))
 
     def melcloud_read_offset (self,name):
-        melcloud_file = os.getcwd() + "/melcloud_offset_values_"+ name + ".txt"
-        Domoticz.Debug("files" + melcloud_file)
+        melcloud_file = self.plugin_path + "/melcloud_offset_values_"+ name + ".txt"
+        Domoticz.Debug("Read files" + melcloud_file)
+        with open(melcloud_file, "r") as f:
+                return f.read()
+
+
+    # Store / Read offset to apply to Domoticz counters
+    def melcloud_store_domcounter_offset (self,name, kwh):
+        melcloud_file =  self.plugin_path + "/melcloud_offset_dvalues_"+ name + ".txt"
+        Domoticz.Debug("Write files" + melcloud_file)
+        with open(melcloud_file, "w") as f:
+                f.write(str(kwh))
+
+    def melcloud_read_domcounter_offset (self,name):
+        melcloud_file = self.plugin_path + "/melcloud_offset_dvalues_"+ name + ".txt"
+        Domoticz.Debug("Read files" + melcloud_file)
         with open(melcloud_file, "r") as f:
                 return f.read()
 
@@ -311,25 +345,48 @@ class BasePlugin:
         # building["Structure"]["Floors"]
         scope = 'Devices'
         found = False
+        Domoticz.Debug ("updatekWh : ")
         for item in building["Structure"][scope]:
-            melcloud_unit_kWh ={}
+            melcloud_unit_kWh = {}
             if item['Type'] == 0 :
                 currentkWh = self.extractDeviceData(item)
+            Domoticz.Debug ("updatekWh : 1 ")
             for unit_kWh in self.list_units_kWh:
+                Domoticz.Debug ("updatekWh : 2 ")
                 if unit_kWh ['name'] == item['DeviceName']:
-                    unit_kWh['Current_kWh'] = currentkWh
+                    Domoticz.Debug ("updatekWh : " + str( item['DeviceName']) + str( currentkWh))
+                    if (currentkWh >= unit_kWh['Offset_DevClim']) :
+                        unit_kWh['Current_kWh'] = currentkWh
+                        Domoticz.Debug("updatekWh " + item['DeviceName'] + " with retrieved value : " +  str(currentkWh))
+                    else :
+                        # in case of retrieved value < Offset_DevClim value
+                        # For instance a clim Reset counter ?
+                        Domoticz.Debug("updatekWh 4 : " + item['DeviceName'] + " Current kWh : " + str(currentkWh) + " < Offset_DevClim : " + str(unit_kWh['Offset_DevClim']) + " Offset_DomkWh : " + str(unit_kWh['Offset_DomkWh']))
+
+                        unit_kWh['Offset_DomkWh'] += unit_kWh['Current_kWh'] - unit_kWh['Offset_DevClim']
+                        unit_kWh['Offset_DevClim'] = currentkWh
+                        unit_kWh['Current_kWh'] = currentkWh
+
+                        self.melcloud_store_offset(item['DeviceName'],unit_kWh['Offset_DevClim'])
+                        self.melcloud_store_domcounter_offset(item['DeviceName'],unit_kWh['Offset_DomkWh'])
+
+
+                        Domoticz.Debug("updatekWh 4 : " + item['DeviceName'] + " Current kWh : " + str(currentkWh) + " < Offset_DevClim : " + str(unit_kWh['Offset_DevClim']) + " Offset_DomkWh : " + str(unit_kWh['Offset_DomkWh']))
+
                     found = True
             if found == False :
                 melcloud_unit_kWh['name'] = item['DeviceName']
                 melcloud_unit_kWh['Current_kWh']= currentkWh
-                # self.unitsJustCreated = False
                 if self.unitsJustCreated == True:
+                    melcloud_unit_kWh['Offset_DevClim']= currentkWh
+                    melcloud_unit_kWh['Offset_DomkWh'] = 0
                     self.melcloud_store_offset(item['DeviceName'],currentkWh)
-                    melcloud_unit_kWh['Offset_kWh']= currentkWh
-                    # print ("\n  WRITE OFFSET VALUE ", melcloud_unit_kWh['Offset_kWh'])
+                    self.melcloud_store_domcounter_offset(item['DeviceName'],0)
                 else:
-                    melcloud_unit_kWh['Offset_kWh'] = float(self.melcloud_read_offset (item['DeviceName']))
-                    # print ("\n READ OFFSET VALUE ", melcloud_unit_kWh['Offset_kWh'])
+                    melcloud_unit_kWh['Offset_DevClim'] = float(self.melcloud_read_offset (item['DeviceName']))
+                    melcloud_unit_kWh['Offset_DomkWh'] = float(self.melcloud_read_domcounter_offset (item['DeviceName']))
+
+                # print("\n melcloud_unit_kWh : " , melcloud_unit_kWh )
                 self.list_units_kWh.append(melcloud_unit_kWh)
 
 
@@ -340,11 +397,8 @@ class BasePlugin:
         kWh = 0
         for unit_kWh in self.list_units_kWh:
             if unit_kWh ['name'] == unitName:
-                if unit_kWh['Current_kWh'] >= unit_kWh['Offset_kWh'] :
-                    kWh = unit_kWh['Current_kWh'] - unit_kWh['Offset_kWh']
-                else :
-                    kWh = 0
-                    Domoticz.Log("PB : Current kWh : " + unit_kWh['Current_kWh'] + " < Offset : " + unit_kWh['Offset_kWh'] + " -> Return 0kWh")
+                kWh = unit_kWh['Current_kWh'] - unit_kWh['Offset_DevClim'] + unit_kWh['Offset_DomkWh']
+                Domoticz.Debug("updateUnitkWh  , Domoticz Counter : " + str(kWh) + " , Current_kWh : " + str(unit_kWh['Current_kWh']) + " , Offset_DomkWh : " + str(unit_kWh['Offset_DomkWh']) + " , Offset_DevClim : " + str(unit_kWh['Offset_DevClim']) )
         return kWh
 
     def onMessage(self, Connection, Data):
@@ -532,6 +586,7 @@ class BasePlugin:
         # Device info for getting kWh
         self.runCounterkWh = self.runCounterkWh - 1
         self.runCounter = self.runCounter - 1
+
         if (self.runCounterkWh <= 0):
             Domoticz.Debug("List units to get kWh")
             self.runCounterkWh = self.runCounterkWhValue
@@ -540,6 +595,7 @@ class BasePlugin:
                     Domoticz.Debug("Current MEL Cloud Key ID:"+str(self.melcloud_key))
                     Domoticz.Debug(" Get kWh")
                     self.melcloud_device_info()
+
         # Unit info
         if (self.runCounter <= 0):
             Domoticz.Debug("Poll unit")
@@ -549,6 +605,7 @@ class BasePlugin:
                     Domoticz.Debug("Current MEL Cloud Key ID:"+str(self.melcloud_key))
                     for unit in self.list_units:
                         self.melcloud_get_unit_info(unit)
+
         else:
             Domoticz.Debug("Polling unit in " + str(self.runCounter) + " heartbeats.")
         # Connection
@@ -567,7 +624,7 @@ class BasePlugin:
                 Domoticz.Debug("MELCloud https failed. Reconnected in "+str(self.runAgain)+" heartbeats.")
 
     def melcloud_create_units(self):
-        Domoticz.Log("Units infos " + str(self.list_units))
+        # Domoticz.Log("Units infos " + str(self.list_units))
         if len(Devices) == 0 :
             # Init Devices
             # Creation of switches
