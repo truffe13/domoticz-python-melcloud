@@ -18,15 +18,17 @@ TestCode has been modified adding required parameters.
 
 
 ## Installation
-1. Clone repository into your domoticz plugins folder
+
+1. Make sure that the plugin directory is writable : the plugin creates 2 files per unit to store offset counter values
+2. Clone repository into your domoticz plugins folder
 ```
 cd domoticz/plugins
 git clone https://github.com/truffe13/domoticz-python-melcloud.git
-Make sure that the plugin directory is writable : the plugin creates 2 files per unit to store offset counter values
 ```
-2. Restart domoticz
-3. Make sure that "Accept new Hardware Devices" is enabled in Domoticz settings
-4. Go to "Hardware" page and add new item with type "MELCloud plugin"
+3. Restart domoticz
+4. Make sure that "Accept new Hardware Devices" is enabled in Domoticz settings
+5. Go to "Hardware" page and add new item with type "MELCloud plugin"
+
 ## Plugin update
 
 ```
