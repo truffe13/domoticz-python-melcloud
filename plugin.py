@@ -3,6 +3,9 @@
 # Author:     Gysmo, 2017 Updated by mitkodotcom 2022 Updated by Dalonsic 2023, Update by truffe13 2025
 #
 # Release Notes:
+# Version: 0.9.1 :
+#        - fix a problem with language setting,  fixed to bulgarian. thks to fdmekinabo for solving this issue
+#
 # Version: 0.9.0
 #        - add Energy counters (1 per unit) based on CurrentEnergyConsumed (experimental)
 #        - Change levels labels to be more explicit (than numbers)  according  MELCloud API : https://github.com/OlivierZal/melcloud-api
@@ -688,10 +691,10 @@ class BasePlugin:
         return True
 
     def melcloud_login(self):
+        lang = Parameters.get("Mode3", "0") # Default to English (0) if not set
         post_fields = "Appversion:'{0}',CaptchaResponse:{1},Email:'{2}',Language:{3},Password:'{4}',Persist:{5}"
-        post_fields = post_fields.format(str("1.23.4.0"), "null",str(Parameters["Username"]),"1", str(Parameters["Password"]), "true")
-        self.melcloud_send_data_json(self.melcloud_urls["login"], "{"+post_fields+"}", "LOGIN")
-
+        post_fields = post_fields.format("1.23.4.0", "null", str(Parameters["Username"]), lang, str(Parameters["Password"]), "true")
+        self.melcloud_send_data_json(self.melcloud_urls["login"], "{" + post_fields + "}", "LOGIN")
         return True
 
     def melcloud_add_unit(self, device, idoffset):
