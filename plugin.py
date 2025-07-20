@@ -3,6 +3,9 @@
 # Author:     Gysmo, 2017 Updated by mitkodotcom 2022 Updated by Dalonsic 2023, Update by truffe13 2025
 #
 # Release Notes:
+# Version: 0.9.2 :
+#        - fanspeed issue fixed
+#
 # Version: 0.9.1 :
 #        - fix a problem with language setting,  fixed to bulgarian. thks to fdmekinabo for solving this issue
 #
@@ -188,7 +191,7 @@ class BasePlugin:
     domoticz_levels = {}
     domoticz_levels["mode"] = {"0": 0, "10": 1, "20": 3, "30": 7, "40": 2, "50": 8}
     domoticz_levels["mode_pic"] = {"0": 9, "10": 15, "20": 16, "30": 7, "40": 11, "50": 11}
-    domoticz_levels["fan"] = {"0": 1, "10": 2, "20": 3, "30": 4, "40": 255, "50": 0, "60": 1}
+    domoticz_levels["fan"] = {"0": 1, "10": 2, "20": 3, "30": 4, "40": 5, "50": 0, "60": 1}
     domoticz_levels["vaneH"] = {"0": 1, "10": 2, "20": 3, "30": 4, "40": 5, "50": 12, "60": 0}
     domoticz_levels["vaneV"] = {"0": 1, "10": 2, "20": 3, "30": 4, "40": 5, "50": 7, "60": 0}
 
